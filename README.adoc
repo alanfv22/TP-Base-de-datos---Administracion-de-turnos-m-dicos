@@ -1,0 +1,180 @@
+= Base de datos 1: Trabajo Práctico 1
+Franco Torrico <francotorrico1999@gmail.com>; Juan Irigoin <jirigoinaa@gmail.com>; Alan Veron <alanfveron@gmail.com>
+v1, {docdate}
+:title-page:
+:numbered:
+:source-highlighter: highlight.js
+:tabsize: 4
+
+== Introducción
+
+El objetivo del trabajo práctico es implementar una base de datos para almacenar la información
+relativa a la administración de turnos médicos.
+
+- El sistema debe permitir:
+
+* Manejo de  turnos.
+** Generación de turnos disponibles.
+** Reserva de turnos.
+** Cancelacion de turnos.
+** Atencion de turno.
+
+* Manejo de pacientes:
+** Mantener toda la información de los pacientes.
+** Llevar un registro de les pacientes atendides en el mes.
+** Asignacion de obras sociales, pueden tener una o ninguna.
+
+* Manejo de liquidaciones
+** Administrar las liquidaciones mensuales de las atenciones realizadas por cada médique.
+** Mensualmente se debe generar una liquidación por obra social. 
+** Informar monto total que será percibido por la atención de les afiliades.
+** Sólo serán abonados les pacientes que concurrieron a la consulta.
+
+* Envio de emails a pacientes:
+** Cada vez que se haga efectiva la reserva de un turno.
+** Cada vez que un turno sea cancelado.
+** Una vez al día, se debe generar un email para les pacientes que tengan un turno
+reservado para dos días después de la fecha actual.
+** Al finalizar el día, se debe generar un email para les pacientes que no hayan con-
+currido a su turno reservado.
+
+
+Por último, para poder comparar el modelo relacional con un modelo no relacional NoSQL,
+se pide guardar los datos de pacientes, médiques, consultorios, obras sociales, y turnos
+(tres por cada médique) en una base de datos NoSQL basada en JSON.
+
+
+== Descripción
+En esta sección se describen las principales dificultades que fueron apareciendo a lo largo del trabajo y las
+soluciones de las mismas.
+
+Generación de turnos disponibles::
+En relación a la generación de turnos disponibles, nos enfrentamos a un desafío principal: asegurar que el primer día del mes coincidiera con el mes pasado como parámetro, dado que los meses no siempre comienzan en un día lunes. Además, era crucial determinar si el mes especificado tenía 28, 30 o 31 días. Para resolver estas dificultades, recurrimos a la sección de la documentación de PostgreSQL (disponible en https://www.postgresql.org/docs/current/functions-datetime.html#FUNCTIONS-DATETIME-EXTRACT), donde encontramos información valiosa sobre la función "extract". Esta función resultó fundamental para superar las complicaciones mencionadas.
+
+Reserva de turnos::
+En relación a la reserva de turnos, un problema identificado fueron las implementaciones de claves foraneas dentro de tabla error, la cuales fueron cargadas en parte por la clase de consultas, al identificar estos errores se borraron las claves que no debieron estar, y otro problema que se encontro era que solo cargaba el true debido a esto y no los datos en la tabla error en caso dar false, esto fue solucionado en la siguiente clase de consulta.
+como solucion a la carga de datos en tabla de error se tuvieron que hacer inserts dentro de cada if de forma lineal. En ciertos momentos una solucion fue seguir mediante raise notice "".
+El curso de los datos guardados y tomados en cada uno de las variables. si bien el archivo .sql de reserva quedo lleno de comentarios. para hacer el seguimiento se tuvo que hacer updates que simularan turnos cargados para poder cumplimentar cada sentencia.
+Luego solo resto el limpiado de codigo innecesario y comentarios para un archivo limpio y comprensible de reserva.
+
+Enviar email perdida turno::
+Para este caso, se contempló y decidió que los mails de los turnos perdidos se deberán ejecutar el dia posterior a la fecha del turno en cuestión. Para de esta forma siempre contemplar todos los turnos y no haya problemas de la hora en que se ejecuta el procedimiento. En caso de que un email ya se haya enviado, no se volverá a enviar.
+
+Enviar email turno reservado::
+En este caso, tomamos una decision similar. Para evitar la generacion de mails duplicados, se decidió corroborar que dicho mail no esté generado, en caso de contingencia donde se ejecutó el procedimiento más de una vez en el mismo día.
+
+Liquidación obras sociales::
+Respecto a esta funcionalidad, la dificultad que encontramos fue que la entrada de datos de la tabla de liquidacion_detalle dependia de la tabla de liquidacion, ya que la primera posee una FK hacia esta última. Para poder obtener dicho valor implementamos un insert con RETURNING para poder guardar el valor que se genera dinámicamente de esa PK en una variable llamada _liquidacion_cabeceraID y usarla como parámetro en el insert de la tabla de liquidacion_detalle.
+
+== Implementación
+
+Main::
+- Es el módulo principal que actúa como mediador entre el programa y el usuario, mostrando un menú desplegable por consola con varias opciones. Su función principal es facilitar la interacción del usuario con el programa, permitiéndole seleccionar las diferentes funcionalidades disponibles a través del menú.
+
+.Codigo de main.go
+
+[source,GO]
+----
+include::main.go[]
+----
+
+funcs::
+- Este módulo proporciona las funciones necesarias para interactuar con PostgreSQL, incluyendo la creación de la base de datos, tablas, claves primarias y foráneas, así como la carga de datos y la ejecución de procedimientos almacenados. Este módulo también proporciona funcionalidad para que los usuarios interactúen con los Stored Procedures generados en el sistema a través de la consola
+.Codigo de db_funcs.go
+
+[source,GO]
+----
+include::funcs/db_funcs.go[]
+----
+[source,GO]
+----
+include::funcs/db_sp.go[]
+----
+
+nosql::
+- Este módulo ofrece todas las funciones necesarias para trabajar con una base de datos NoSQL basada en JSON. Permite cargar los datos, convertirlos al formato JSON y almacenarlos en la base de datos BoltDB.
+[source,GO]
+----
+include::nosql/nosql.go[]
+----
+
+migraciones::
+- Este módulo contiene archivos SQL para diversas acciones en una base de datos, como la conexión, creación de la base de datos y tablas, asignación y eliminación de PKs y FKs, y carga de datos en las tablas.
+
+[source,SQL]
+----
+include::migraciones/db.sql[]
+----
+[source,SQL]
+----
+include::migraciones/tablas.sql[]
+----
+[source,SQL]
+----
+include::migraciones/crear_pks_fks.sql[]
+----
+[source,SQL]
+----
+include::migraciones/eliminar_pks_fks.sql[]
+----
+[source,SQL]
+----
+include::migraciones/borrar_base_de_datos.sql[]
+----
+[source,SQL]
+----
+include::migraciones/populate.sql[]
+----
+
+sp::
+- Este módulo contiene archivos SQL que crean Stored Procedures para el manejo del sistema. Estos Stored Procedures incluyen funcionalidades como el generador de turnos, reserva y cancelación de turnos, liquidación de obras sociales y envío de emails. Estas funcionalidades son fundamentales para la gestión eficiente del sistema.
+
+[source,SQL]
+----
+include::sp/atencion_de_turno.sql[]
+----
+[source,SQL]
+----
+include::sp/cancelacion_de_turnos.sql[]
+----
+[source,SQL]
+----
+include::sp/enviar_email.sql[]
+----
+[source,SQL]
+----
+include::sp/enviar_email_perdida_turno_reservado.sql[]
+----
+[source,SQL]
+----
+include::sp/enviar_email_recordatorio.sql[]
+----
+[source,SQL]
+----
+include::sp/enviar_email_trigger.sql[]
+----
+[source,SQL]
+----
+include::sp/generador_turnos_disponibles.sql[]
+----
+[source,SQL]
+----
+include::sp/test_reserva_turnos.sql[]
+----
+[source,SQL]
+----
+include::sp/liquidacion_obras_sociales.sql[]
+----
+[source,SQL]
+----
+include::sp/reserva_de_turno.sql[]
+----
+
+== Conclusiones
+En conclusión, a través de este trabajo en PostgreSQL con Go y la incorporación de BoltDB, hemos adquirido un valioso aprendizaje sobre la integración de diferentes tecnologías y su aplicación en el desarrollo de sistemas de gestión de bases de datos.
+Hemos comprendido cómo establecer una conexión exitosa entre Go y PostgreSQL, lo que nos ha permitido realizar operaciones fundamentales en la base de datos, como consultas y manipulación de datos. Además, hemos explorado las ventajas de utilizar una base de datos embebida como BoltDB, y cómo se puede aprovechar su rapidez y eficiencia en entornos con recursos limitados.
+
+
+
+
+
